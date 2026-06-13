@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import re
+import numpy as np
 
 from colabdesign import clear_mem, mk_afdesign_model
 from colabdesign.shared.utils import copy_dict
@@ -28,6 +29,15 @@ from pxdbench.utils import concat_dict_values, seed_everything
 
 logger = logging.getLogger(__name__)
 
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super(NumpyEncoder, self).default(obj)
 
 def predict_binder_monomer(
     prediction_model,
@@ -221,7 +231,7 @@ def main():
         )
 
         with open(args.output, "w") as f:
-            json.dump(results, f)
+            json.dump(results, f, cls=NumpyEncoder)
 
         print(f"Successfully completed AF2 binder only prediction!")
 
