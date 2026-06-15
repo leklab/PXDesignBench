@@ -23,8 +23,8 @@ from typing import Any, Mapping
 
 import numpy as np
 import torch
-from protenix.data.infer_data_pipeline import InferenceDataset
-from protenix.data.json_maker import cif_to_input_json
+from protenix.data.inference.infer_dataloader import InferenceDataset
+from protenix.data.inference.json_maker import cif_to_input_json
 from protenix.data.utils import pdb_to_cif
 from protenix.model.protenix import Protenix
 from protenix.utils.seed import seed_everything
@@ -192,12 +192,25 @@ class ProtenixFilter(ProtenixAPI):
         use_msa=True,
         suffix="",
     ):
-        inference_dataset = InferenceDataset(
-            input_json_path=input_json_path,
-            dump_dir=None,
-            use_msa=use_msa,
-            configs=self.ptx_cfg,
-        )
+
+        # === PROTENIX V2 FILTER UPGRADE ===
+        # Bind the properties explicitly into the native configurations object
+        self.ptx_cfg.input_json_path = input_json_path
+        self.ptx_cfg.dump_dir = dump_dir
+
+        #Using MSA is not relevant for protein binder design
+        self.ptx_cfg.use_msa = False
+
+        # Enforce necessary safety toggles to prevent language model or template lookup errors
+        if not hasattr(self.ptx_cfg, "use_template"):
+            self.ptx_cfg.use_template = False
+        if not hasattr(self.ptx_cfg, "esm"):
+            from types import SimpleNamespace
+            self.ptx_cfg.esm = SimpleNamespace(enable=False)
+
+        # Pass the unified config object positionally
+        inference_dataset = InferenceDataset(configs=self.ptx_cfg)
+
         os.makedirs(dump_dir, exist_ok=True)
         dumper = DataDumper(base_dir=dump_dir)
 
@@ -333,12 +346,26 @@ class ProtenixFilter(ProtenixAPI):
         N_cycle=4,
         use_msa=True,
     ):
-        inference_dataset = InferenceDataset(
-            input_json_path=input_json_path,
-            use_msa=use_msa,
-            dump_dir=None,
-            configs=self.ptx_cfg,
-        )
+
+        # === PROTENIX V2 FILTER UPGRADE ===
+        # Bind properties into the configurations object before initialization
+        self.ptx_cfg.input_json_path = input_json_path
+        self.ptx_cfg.dump_dir = dump_dir
+
+        #Using MSA is not relevant for protein binder design
+        self.ptx_cfg.use_msa = False
+        #self.ptx_cfg.use_msa = use_msa
+
+        if not hasattr(self.ptx_cfg, "use_template"):
+            self.ptx_cfg.use_template = True
+            #self.ptx_cfg.use_template = False
+        if not hasattr(self.ptx_cfg, "esm"):
+            from types import SimpleNamespace
+            self.ptx_cfg.esm = SimpleNamespace(enable=False)
+
+        # Pass the unified config object positionally
+        inference_dataset = InferenceDataset(configs=self.ptx_cfg)
+
         os.makedirs(dump_dir, exist_ok=True)
         dumper = DataDumper(base_dir=dump_dir)
 
@@ -381,7 +408,7 @@ class ProtenixFilter(ProtenixAPI):
             pred_cif_path = os.path.join(
                 save_dir,
                 "predictions",
-                f"{sample_name}_seed_{seed}_sample_0.cif",
+                f"{sample_name}_sample_0.cif",
             )
             pred_pdb_path = os.path.join(dump_dir, f"{sample_name}.pdb")
             convert_cif_to_pdb(pred_cif_path, pred_pdb_path)
